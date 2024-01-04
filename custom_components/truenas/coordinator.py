@@ -287,18 +287,19 @@ class TrueNASCoordinator(DataUpdateCoordinator[None]):
     # ---------------------------
     def get_systemstats(self) -> None:
         """Get system statistics."""
+        start_time = int(datetime.timestamp(datetime.now() - timedelta(seconds=90)))
+        end_time = int(datetime.timestamp(datetime.now() - timedelta(seconds=30)))
         tmp_params = {
             "graphs": [
                 {"name": "load"},
                 {"name": "cputemp"},
                 {"name": "cpu"},
                 {"name": "arcsize"},
-                {"name": "arcratio"},
                 {"name": "memory"},
             ],
             "reporting_query": {
-                "start": "now-90s",
-                "end": "now-30s",
+                "start": start_time,
+                "end": end_time,
                 "aggregate": True,
             },
         }
@@ -333,8 +334,8 @@ class TrueNASCoordinator(DataUpdateCoordinator[None]):
                                 tmp,
                             ],
                             "reporting_query": {
-                                "start": "now-90s",
-                                "end": "now-30s",
+                                "start": start_time,
+                                "end": end_time,
                                 "aggregate": True,
                             },
                         },
@@ -366,12 +367,12 @@ class TrueNASCoordinator(DataUpdateCoordinator[None]):
 
             # CPU load
             if tmp_graph[i]["name"] == "load":
-                tmp_arr = ("load_shortterm", "load_midterm", "load_longterm")
+                tmp_arr = ("shortterm", "midterm", "longterm")
                 self._systemstats_process(tmp_arr, tmp_graph[i], "")
 
             # CPU usage
             if tmp_graph[i]["name"] == "cpu":
-                tmp_arr = ("interrupt", "system", "user", "nice", "idle")
+                tmp_arr = ("softirq", "system", "user", "nice", "idle", "iowait")
                 self._systemstats_process(tmp_arr, tmp_graph[i], "cpu")
                 self.ds["system_info"]["cpu_usage"] = round(
                     self.ds["system_info"]["cpu_system"]
@@ -387,12 +388,12 @@ class TrueNASCoordinator(DataUpdateCoordinator[None]):
                     tmp_graph[i]["legend"] = [
                         tmp.replace("if_octets_", "") for tmp in tmp_graph[i]["legend"]
                     ]
-                    tmp_arr = ("rx", "tx")
+                    tmp_arr = ("received", "sent")
                     if "aggregations" in tmp_graph[i]:
                         for e in range(len(tmp_graph[i]["legend"])):
                             tmp_var = tmp_graph[i]["legend"][e]
                             if tmp_var in tmp_arr:
-                                tmp_val = tmp_graph[i]["aggregations"]["mean"][e] or 0.0
+                                tmp_val = tmp_graph[i]["aggregations"]["mean"][tmp_var] or 0.0
                                 self.ds["interface"][tmp_etc][tmp_var] = round(
                                     (tmp_val / 1024), 2
                                 )
@@ -403,16 +404,16 @@ class TrueNASCoordinator(DataUpdateCoordinator[None]):
             # arcratio
             if tmp_graph[i]["name"] == "memory":
                 tmp_arr = (
-                    "memory-used_value",
-                    "memory-free_value",
-                    "memory-cached_value",
-                    "memory-buffered_value",
+                    "used",
+                    "free",
+                    "cached",
+                    "buffers",
                 )
                 self._systemstats_process(tmp_arr, tmp_graph[i], "memory")
                 self.ds["system_info"]["memory-total_value"] = round(
                     self.ds["system_info"]["memory-used_value"]
                     + self.ds["system_info"]["memory-free_value"]
-                    + self.ds["system_info"]["cache_size-arc_value"],
+                    + self.ds["system_info"]["memory-arc_size_value"],
                     2,
                 )
                 if self.ds["system_info"]["memory-total_value"] > 0:
@@ -428,7 +429,7 @@ class TrueNASCoordinator(DataUpdateCoordinator[None]):
 
             # arcsize
             if tmp_graph[i]["name"] == "arcsize":
-                tmp_arr = ("cache_size-arc_value", "cache_size-L2_value")
+                tmp_arr = ("arc_size")
                 self._systemstats_process(tmp_arr, tmp_graph[i], "memory")
 
             # arcratio
@@ -444,9 +445,9 @@ class TrueNASCoordinator(DataUpdateCoordinator[None]):
             for e in range(len(graph["legend"])):
                 tmp_var = graph["legend"][e]
                 if tmp_var in arr:
-                    tmp_val = graph["aggregations"]["mean"][e] or 0.0
+                    tmp_val = graph["aggregations"]["mean"][tmp_var] or 0.0
                     if t == "memory":
-                        self.ds["system_info"][tmp_var] = tmp_val
+                        self.ds["system_info"][f"memory-{tmp_var}_value"] = tmp_val
                     elif t == "cpu":
                         self.ds["system_info"][f"cpu_{tmp_var}"] = round(tmp_val, 2)
                     else:
